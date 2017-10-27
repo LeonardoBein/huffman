@@ -375,3 +375,16 @@ int ipow(int base, int exp){
 
     return result;
 }
+int vazia(sNo *a){
+    return a == NULL;
+}
+void imprime(sNo *a){
+	if (vazia(a))
+		printf ("<>");
+	else {
+		printf ("<%c (%d)",a->letra, a->valor);
+		imprime(a->left);
+		imprime(a->right);
+		printf (">");
+	}
+}

@@ -5,7 +5,7 @@
 
 
 int main(int argc, char const *argv[]) {
-  char *frase_bi, *frase, *frase_Orig, c, option;
+  char *frase_bi, *frase, *frase_Orig, c, option, didatico=0;
   unsigned char *compactado;
   int tamL,tam,tamF, tamA , i, error;
   int *vetor;
@@ -43,8 +43,11 @@ int main(int argc, char const *argv[]) {
       help();
     }
 
-  }
+    if(argv[1][2] == 'd'){
+      didatico = 1;
+    }
 
+  }
 
 
   if (option == 'c') {
@@ -54,10 +57,43 @@ int main(int argc, char const *argv[]) {
     }
     vetor = le_arq(arq);
     folhas = cria_folhas(vetor,&tamA);
+    if (didatico) {
+      printf("\nFrequência\n" );
+      for (i = 0; i < tamA; i++) {
+        printf("'%c':%d\n",folhas[i].letra,folhas[i].valor );
+      }
+    }
     table = criar_freq_table(vetor,&tamF);
+
     arvore_final = huffman(folhas,&tamA);
+
+    if (didatico) {
+      printf("\nArvore\n\n" );
+      imprime(arvore_final);
+      printf("\n");
+    }
+
+    if (didatico) {
+      printf("\nTabela de Símbolos\n" );
+      buffer = (char *)malloc(altura(arvore_final));
+      for (i = 0; i < tamF; i++) {
+        buffer[0] ='\0';
+        if(pegaCodigo(arvore_final,table[i].data,buffer,0)){
+          printf("'%c':%s\n",table[i].data,buffer);
+        }
+      }
+    }
+
     compactado = compactaString(aplicar_huffman(arq, arvore_final), &tamL);
     fclose(arq);
+
+
+    if (didatico) {
+      printf("\nBytes de Saída\n" );
+      for (i = 0; i < tamL; i++) {
+        printf("%s\n",Var_Char_Bin(compactado[i]) );
+      }
+    }
 
 
     //gravando

@@ -36,7 +36,8 @@ void ordenar(sNo *lista, int tam, char tipo);
 
 int *le_arq(FILE *arq);
 sNo *huffman(sNo *arvore, int *tamA);
-int vazia (sNo *a);
+int vazia(sNo *a);
+void imprime(sNo *a);
 int pegaCodigo(sNo *n, char c, char *codigo, int tamanho);
 char pegaChar(sNo *no, char *string, int p);
 char *aplicar_huffman(FILE *arq, sNo *arvore);
