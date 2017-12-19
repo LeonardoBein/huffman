@@ -9,11 +9,11 @@ int main(int argc, char const *argv[]) {
   unsigned char *compactado;
   int tamL,tam,tamF, tamA , i, error;
   int *vetor;
-  char *buffer,*dest, *orig;
-  sNo *folhas, *arvore_final;
+  char *bytes,*dest, *orig;
+  sNo *folhas, *arvore;
   sHeader *header;
   sFreq_entry *table;
-  FILE *arq;
+  FILE *arquivo_origem,*arquivo_destino;
 
   //huffman -c orig dest
   if (argc == 4) {
@@ -51,11 +51,11 @@ int main(int argc, char const *argv[]) {
 
 
   if (option == 'c') {
-    if ((arq = fopen(orig,"r")) == NULL) {
+    if ((arquivo_origem = fopen(orig,"r")) == NULL) {
       printf("Erro na abertura do arquivo %s",orig);
       exit(1);
     }
-    vetor = le_arq(arq);
+    vetor = le_arq(arquivo_origem);
     folhas = cria_folhas(vetor,&tamA);
     if (didatico) {
       printf("\nFrequência\n" );
@@ -65,81 +65,71 @@ int main(int argc, char const *argv[]) {
     }
     table = criar_freq_table(vetor,&tamF);
 
-    arvore_final = huffman(folhas,&tamA);
+    arvore = huffman(folhas,&tamA);
 
-    if (didatico) {
-      printf("\nArvore\n\n" );
-      imprime(arvore_final);
-      printf("\n");
-    }
+    create_bi(arvore,0,0,-1);
+
 
     if (didatico) {
       printf("\nTabela de Símbolos\n" );
-      buffer = (char *)malloc(altura(arvore_final));
-      for (i = 0; i < tamF; i++) {
-        buffer[0] ='\0';
-        if(pegaCodigo(arvore_final,table[i].data,buffer,0)){
-          printf("'%c':%s\n",table[i].data,buffer);
-        }
-      }
+      binarios(arvore,vetor);
+      printf("\nArvore\n\n" );
+      imprime(arvore);
+      printf("\n");
     }
-
-    compactado = compactaString(aplicar_huffman(arq, arvore_final), &tamL);
-    fclose(arq);
-
-
-    if (didatico) {
-      printf("\nBytes de Saída\n" );
-      for (i = 0; i < tamL; i++) {
-        printf("%s\n",Var_Char_Bin(compactado[i]) );
-      }
-    }
-
 
     //gravando
-    if((arq = fopen(dest, "wb")) == NULL){
-      printf("Erro na criacao do arquivo %s",dest);
-      exit(1);
+    if((arquivo_destino = fopen(dest, "wb")) == NULL){
+     printf("Erro na criacao do arquivo %s",dest);
+    exit(1);
     }
 
-    header = criar_header(tamL,tamF);
+
+    header = criar_header(tamanho_bitstream(arvore,vetor),tamF);
     error = 0;
     // printf("%d\n",sizeof(sFreq_table) );
     // printf("%d\n",sizeof(sFreq_entry) );
 
-    if(fwrite(header, sizeof(sHeader), 1,arq) != 1)
+    // printf("freq: %d \tbits: %d\n",header->num_items,header->tamBitstream);
+
+
+    if(fwrite(header, sizeof(sHeader), 1,arquivo_destino) != 1)
       error = 1;
-    if (fwrite(table,sizeof(sFreq_entry),header[0].num_items,arq) != header[0].num_items)
+    if (fwrite(table,sizeof(sFreq_entry),header[0].num_items,arquivo_destino) != header[0].num_items)
       error = 1;
-    if (fwrite(compactado,1,header[0].tamBitstream,arq) != header[0].tamBitstream)
+    if (didatico) {
+      printf("\nBytes de Saída\n" );
+    }
+    if(compactar(arvore, arquivo_origem, arquivo_destino,didatico))
       error = 1;
+
 
     if (error == 1) {
       printf("Erro na compactacao do arquivo %s\nMotivo: erro de escrita no arquivo %s",orig,dest);
       exit(1);
     }
 
-    fclose(arq);
+    fclose(arquivo_origem);
+    fclose(arquivo_destino);
     free(header);
     free(orig);
     free(dest);
-    free(compactado);
-    free(arvore_final);
+    free(arvore);
     free(table);
     return 0;
   }
-  //extracao
+  // //extracao
   else if (option == 'x') {
 
     header = (sHeader*)calloc(1,sizeof(sHeader));
-    // table = (sFreq_table*)calloc(1, sizeof(sFreq_table));
-    // table[0].freqs = (sFreq_entry *)calloc(73,sizeof(sFreq_entry)*73);
     error = 0;
-    if((arq = fopen(orig, "rb")) == NULL){
+
+    if((arquivo_origem = fopen(orig, "rb")) == NULL){
       printf("Erro na abertura do arquivo %s",orig);
       exit(1);
     }
-    if(fread(header, sizeof(sHeader), 1,arq) != 1){
+
+    if(fread(header, sizeof(sHeader), 1,arquivo_origem) != 1){
       printf("Erro na leitura do arquivo");
       exit(1);
     }
@@ -152,45 +142,39 @@ int main(int argc, char const *argv[]) {
     tamF = header[0].num_items;
     table = (sFreq_entry *)calloc(tamF,sizeof(sFreq_entry)*tamF);
 
-    if(fread(table, sizeof(sFreq_entry), tamF,arq) != tamF){
+    if(fread(table, sizeof(sFreq_entry), tamF,arquivo_origem) != tamF){
       printf("Arquivo corrompido %s", orig);
       exit(1);
     }
 
     tamL = header[0].tamBitstream;
-    if ((compactado = (char *)calloc(tamL,sizeof(char)*tamL)) == NULL) {
-      printf("Erro de alocacao dinamica de memoria\n");
-      exit(1);
-    }
-    if((i = fread(compactado, 1, tamL,arq)) != tamL){
-      printf("Arquivo corrompido %s", orig);
-      exit(1);
-    }
-    fclose(arq);
 
     vetor = (int*)calloc(256,sizeof(int)*256);
     for ( i = 0; i < tamF; i++) {
       vetor[table[i].data] = table[i].freq;
     }
     folhas = cria_folhas(vetor,&tamA);
-    arvore_final = huffman(folhas,&tamA);
-    frase_bi = descompactaString(compactado,tamL);
+    arvore = huffman(folhas,&tamA);
+    create_bi(arvore,0,0,-1);
 
-    if((arq = fopen(dest, "w")) == NULL){
+    if((arquivo_destino = fopen(dest, "w")) == NULL){
       printf("Erro na abertura do arquivo %s",dest);
       exit(1);
     }
 
-    criarFrase(arq,arvore_final,frase_bi);
+    if(descompactar(arvore,tamA,arquivo_origem,arquivo_destino,tamL)){
+      printf("Error\n" );
+      exit(1);
+    }
 
-    fclose(arq);
+
+    fclose(arquivo_origem);
+    fclose(arquivo_destino);
     free(header);
     free(orig);
     free(dest);
-    free(frase_bi);
     free(vetor);
-    free(compactado);
-    free(arvore_final);
+    free(arvore);
     free(table);
     return 0;
   }

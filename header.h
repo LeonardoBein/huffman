@@ -5,6 +5,8 @@
 struct sNo{
   char letra;
   int valor;
+  unsigned int valor_bi;
+  int tamanho_bi;
   struct sNo *left;
   struct sNo *right;
 };
@@ -36,18 +38,20 @@ void ordenar(sNo *lista, int tam, char tipo);
 
 int *le_arq(FILE *arq);
 sNo *huffman(sNo *arvore, int *tamA);
+void create_bi(sNo *arvore, int caminhoED,  unsigned int bi,int tamBI);
 int vazia(sNo *a);
 void imprime(sNo *a);
-int pegaCodigo(sNo *n, char c, char *codigo, int tamanho);
+void get_bin(sNo *a, char letra, int echo,int *altura,int *valor_bi);
 char pegaChar(sNo *no, char *string, int p);
-char *aplicar_huffman(FILE *arq, sNo *arvore);
+void binarios(sNo *raiz, int freq[256]);
+int tamanho_bitstream(sNo *raiz,int *freq);
 
 void criarFrase(FILE *arq, sNo *no, char *string);
 
 int altura (sNo *a);
 sHeader *criar_header(int Bitstream,int num);
-char *compactaString(char *string, int *tamL);
-char *descompactaString(char  *string, int tamL);
+int compactar(sNo *raiz, FILE *ARQorig, FILE *ARQdest,int echo);
+int descompactar(sNo *arvore,int tamA, FILE *arquivo_origem , FILE *arquivo_destino, int tamL);
 char *Var_Char_Bin(int c);
 
 int dividir_int(int a, int b);

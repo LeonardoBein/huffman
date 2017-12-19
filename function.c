@@ -80,31 +80,6 @@ sFreq_entry *criar_freq_table(int freq[256],int *r){
   return freqs;
 }
 
-char *aplicar_huffman(FILE *arq, sNo *arvore){
-  char *final, *buffer,c;
-  int len, lenBuffer, more, i;
-
-    len = lenBuffer = altura(arvore);
-    final = (char *)calloc(len,sizeof(char)*len);
-    buffer = (char *)calloc(len,sizeof(char)*len);
-    while ((c = fgetc(arq)) != EOF) {
-      buffer[0] = '\0';
-      if (pegaCodigo( arvore, c , buffer , 0 ) ) {
-        if(strlen(final) == len   || strlen(final)+strlen(buffer) >= len){
-          len += lenBuffer;
-          // printf("aumentar memoria final [%c] de %d para %d\n",c,strlen(final),len);
-          if ((final = (char *)realloc(final, sizeof(char)*len)) == NULL) {
-            printf("Error de memoria\n");
-            exit(1);
-          }
-        }
-        strcat(final,buffer);
-      }
-    }
-    free(buffer);
-    rewind(arq);
-    return final;
-}
 
 
 sNo *inicializa(void){
@@ -183,65 +158,58 @@ sNo *huffman(sNo *arvore, int *tamA){
   }
   arvore_final[0] = arvore[0];
   free(arvore);
-  *tamA = tam;
+  *tamA = tamF;
   return arvore_final;
 }
-int pegaCodigo(sNo *n, char c, char *codigo, int tamanho){
-    // printf("%c==%c\n", n->letra,c );
-    if (!(n->left || n->right) && n->letra == c)
-    {
-        codigo[tamanho] = '\0';
-        return 1;
-    }
-    else{
-        int encontrado = 0;
 
-        if (n->left){
-            codigo[tamanho] = '0';
-            encontrado = pegaCodigo(n->left, c, codigo, tamanho + 1);
-        }
-        if (!encontrado && n->right){
-            codigo[tamanho] = '1';
-            encontrado = pegaCodigo(n->right, c, codigo, tamanho + 1);
-        }
-        if (!encontrado){
-            codigo[tamanho] = '\0';
-        }
-        return encontrado;
+void create_bi(sNo *arvore, int caminhoED, unsigned int bi,int tamBI){
+  if (tamBI >=0) {
+    bi = caminhoED << (30-tamBI) | bi;
+    if (arvore->letra != '\0') {
+      tamBI++;
+      arvore->valor_bi = bi;
+      arvore->tamanho_bi = tamBI;
     }
-}
-
-char pegaChar(sNo *no, char *string, int p){
-    if (string[p] != ' ') {
-      if (no->letra != '\0') {
-        return no->letra;
-      }
-      if (string[p] == '1') {
-        string[p] = ' ';
-        return pegaChar(no->right,string,p+1);
-      }
-      if (string[p] == '0') {
-        string[p] = ' ';
-        return pegaChar(no->left,string,p+1);
-      }
-    }
-    if (string[p] == '\0') {
-      return '\0';
-    }
-    else{
-     return pegaChar(no,string,p+1);
-   }
-}
-
-void criarFrase(FILE *arq, sNo *no, char *string){
-  char *frase_Orig, c;
-  rewind(arq);
-  while((c = pegaChar(no,string,0)) != '\0'){
-    // printf("%s\n",string );
-    fputc(c,arq);
   }
-  rewind(arq);
+  tamBI++;
+  if(arvore->left != NULL) create_bi(arvore->left, 0, bi, tamBI);
+  if(arvore->right != NULL) create_bi(arvore->right, 1, bi, tamBI);
+
 }
+
+
+void get_bin(sNo *a, char letra, int echo,int *altura,int *valor_bi){
+  if (!(a->left || a->right) && a->letra == letra){
+		// return a->valor_bi>>31-a->tamanho_bi;
+    if (echo == 1) {
+      printf("%c: ",a->letra );
+      for (int i = a->tamanho_bi; i > 0; i--) {
+        printf("%d", a->valor_bi>>30-a->tamanho_bi+i & 1 );
+      }
+      printf("\t%d\n",a->valor_bi>>31-a->tamanho_bi);
+    }
+    if (altura != 0x0) {
+      *altura = a->tamanho_bi;
+    }
+    if (valor_bi != 0x0) {
+      *valor_bi = a->valor_bi;
+    }
+    // printf("valor_bi:%d\n",a->valor_bi>>32-a->tamanho_bi );
+	}
+	if(a->left != NULL) get_bin(a->left, letra,echo, altura,valor_bi);
+	if(a->right != NULL) get_bin(a->right, letra,echo,altura,valor_bi);
+}
+
+
+void binarios(sNo *raiz, int freq[256]){
+	for (int i = 0; i < 256; i++) {
+    if (freq[i]>0) {
+      get_bin(raiz,i,1,0,0);
+    }
+	}
+}
+
+
 // retorna a altura da arvore
 int altura (sNo *a){
 	int ae, ad;
@@ -273,49 +241,93 @@ sHeader *criar_header(int Bitstream,int num){
   return header;
 }
 
-char *compactaString(char *string, int *tamL){
-  int i,j ,tam, tamBits = 8 , posicao,anx=0, anx2=0;
-  char  *compactacao;
-  tam = strlen(string)/tamBits;
+int tamanho_bitstream(sNo *raiz,int *freq){
+  int tam=0,anx=0;
+  for (int i = 0; i < 256; i++) {
+    if (freq[i]>0) {
+      get_bin(raiz,i,0,&anx,0);
+      tam += anx*freq[i];
+      anx=0;
+    }
+	}
+  return tam;
+}
 
-  if (tam == 0) {tam = 1;}
-  else if(strlen(string)%tamBits != 0){tam++;}
-  tam++;
+int compactar(sNo *raiz, FILE *ARQorig, FILE *ARQdest,int echo){
+  unsigned char byte='\0';
+  char c;
+  unsigned int altura,valor_bi;
+  int j,i=0,k=0;
 
-  compactacao = (char  *) calloc(tam,sizeof(char)*tam);
+  j=7;
+  while ((c = fgetc(ARQorig)) != EOF) {
+    altura = valor_bi = 0;
+    get_bin(raiz, c, 0, &altura, &valor_bi);
 
-  for ( i = 1, posicao = 0 ; i < tam; i++) {
-    for ( j = (tamBits-1); j >= 0 ; j--,++posicao) {
-      if (string[posicao] == '1' ) {
-        anx += ipow(2,j);
+    for (i = altura; i > 0; i--,j--) {
+      if (j < 0) {
+        j=7;
+        if (fputc(byte,ARQdest) == EOF) { return 1; } //erro
+        if(echo){
+          printf("\t%x\n", byte );
+        }
+        byte = 0b00000000;
       }
-      else if (string[posicao] == '\0') {
-        compactacao[0] = j+1;
-        j=-1;
+
+      if (echo) {
+        printf("%d",valor_bi>>30-altura+i & 1 );
+      }
+
+      if ((valor_bi>>30-altura+i & 1) == 1) {
+        byte = (1 << j) | byte;
       }
     }
-    compactacao[i] = anx;
-    anx = 0;
   }
-  *tamL = tam;
-  return compactacao;
-}
-char *descompactaString( char *string, int tamL){
-  int tam,tamDes, Ianx, i;
-  char *descompactacao, *anx;
-  tam = tamL;
-  tamDes = 8*(tam-1);
-  descompactacao = (char *)calloc(tamDes,sizeof(char)*tamDes);
+  if (echo) {
+    printf("\t%x\n",byte);
+  }
+  //escrever o ultimo byte.
+  if (fputc(byte,ARQdest) == EOF) { return 1; } //erro
 
-  for ( i = 1; i < tam; i++) {
-    anx = Var_Char_Bin(string[i]);
-    strcat(descompactacao,anx);
-  }
-  Ianx = string[0];
-  if (Ianx) {
-    descompactacao[tamDes-Ianx] = '\0';
-  }
-  return descompactacao;
+  rewind(ARQorig);
+  return 0;
+}
+
+
+
+int descompactar(sNo *arvore,int tamA, FILE *arquivo_origem , FILE *arquivo_destino, int tamL){
+  unsigned int codigo;
+  char codigo_entrada;
+  int tamanho_cod,i,j;
+
+  while(!feof(arquivo_origem)){
+        codigo_entrada = fgetc(arquivo_origem);
+        codigo = 0;
+        tamanho_cod = 0;
+
+        for (i = 7; i >= 0 && tamL != 0; i--){
+          codigo = (codigo<<1);
+          tamL--;
+          tamanho_cod++;
+          codigo = codigo | ((codigo_entrada>>i) & 1);
+
+          for ( j = 0; j < tamA+1; j++){
+            if (codigo == arvore[j].valor_bi>>31-arvore[j].tamanho_bi && arvore[j].letra != '\0' && tamanho_cod == arvore[j].tamanho_bi){
+              fputc(arvore[j].letra,arquivo_destino);
+              // printf("%c",arvore[j].letra );
+              codigo = 0;
+              tamanho_cod = (0);
+              j=tamA+1;
+            }
+          }
+
+          if(i == 0){
+            codigo_entrada = fgetc(arquivo_origem);
+            i = 8 ;
+          }
+        }
+      }
+  return 0;
 }
 
 char *Var_Char_Bin(int c){
