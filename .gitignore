@@ -43,6 +43,9 @@ huffman
 *.idb
 *.pdb
 
+# file compact
+*.hufx
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
